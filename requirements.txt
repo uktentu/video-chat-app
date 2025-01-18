@@ -8,4 +8,5 @@ python-socketio==5.9.0
 simple-websocket==1.0.0
 gunicorn==21.2.0
 eventlet==0.33.3
-SQLAlchemy==1.4.41 
+SQLAlchemy==1.4.41
+psycopg2-binary==2.9.9 
