@@ -1,1 +1,1 @@
-web: gunicorn --worker-class eventlet -w 1 app:app 
+web: gunicorn --worker-class eventlet -w 1 --max-requests 1000 --max-requests-jitter 50 --timeout 60 --keep-alive 5 --log-level info app:app 
