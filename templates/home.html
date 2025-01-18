@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="text-center mb-5">
+        <h1 class="display-4 mb-4">Welcome to Video Chat</h1>
+        {% if current_user.is_authenticated %}
+            <div class="row justify-content-center">
+                <div class="col-md-6">
+                    <div class="card mb-4">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">Create New Meeting</h5>
+                        </div>
+                        <div class="card-body">
+                            <form action="{{ url_for('create_meeting') }}" method="POST">
+                                <div class="mb-3">
+                                    <input type="text" name="title" class="form-control" placeholder="Meeting Title" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Create Meeting</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="card mb-4">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">Join Meeting</h5>
+                        </div>
+                        <div class="card-body">
+                            <form action="{{ url_for('join_meeting') }}" method="POST">
+                                <div class="mb-3">
+                                    <input type="text" name="meeting_id" class="form-control" placeholder="Enter Meeting ID" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Join Meeting</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    {% if meetings %}
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">Your Meetings</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="list-group">
+                                {% for meeting in meetings %}
+                                <a href="{{ url_for('chat', meeting_id=meeting.meeting_id) }}" class="list-group-item list-group-item-action">
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <h6 class="mb-1">{{ meeting.title }}</h6>
+                                        <small class="text-muted">{{ meeting.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                                    </div>
+                                    <small class="text-muted">Meeting ID: {{ meeting.meeting_id }}</small>
+                                </a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        {% else %}
+            <p class="lead">Please login or create an account to start or join meetings</p>
+            <div class="mt-4">
+                <a href="{{ url_for('login') }}" class="btn btn-primary me-2">Login</a>
+                <a href="{{ url_for('signup') }}" class="btn btn-outline-primary">Sign Up</a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %} 

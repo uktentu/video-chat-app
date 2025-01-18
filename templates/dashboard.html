@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <h2 class="mb-4">Welcome, {{ current_user.username }}!</h2>
+            
+            <!-- Quick Actions -->
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Create New Meeting</h5>
+                            <p class="card-text">Start a new video chat room</p>
+                            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createMeetingModal">
+                                Create Meeting
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Join Meeting</h5>
+                            <p class="card-text">Join an existing video chat room</p>
+                            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#joinMeetingModal">
+                                Join Meeting
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Meetings -->
+            {% if meetings %}
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Your Recent Meetings</h5>
+                </div>
+                <div class="list-group list-group-flush">
+                    {% for meeting in meetings %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1">{{ meeting.title }}</h6>
+                                <small class="text-muted">Created: {{ meeting.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                                <br>
+                                <small class="text-muted">ID: {{ meeting.meeting_id }}</small>
+                            </div>
+                            <div>
+                                <a href="{{ url_for('chat', meeting_id=meeting.meeting_id) }}" class="btn btn-primary btn-sm">Join</a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Create Meeting Modal -->
+<div class="modal fade" id="createMeetingModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create New Meeting</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ url_for('create_meeting') }}" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="title" class="form-label">Meeting Title</label>
+                        <input type="text" class="form-control" id="title" name="title" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Meeting</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Join Meeting Modal -->
+<div class="modal fade" id="joinMeetingModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Join Meeting</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ url_for('join_meeting') }}" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="meeting_id" class="form-label">Meeting ID</label>
+                        <input type="text" class="form-control" id="meeting_id" name="meeting_id" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">Join Meeting</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %} 

@@ -1,0 +1,1068 @@
+{% extends "base.html" %}
+
+{% block title %}{{ meeting.title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row" id="chat-container">
+        <!-- Video/Audio Section -->
+        <div class="col-md-4" id="video-section">
+            <div class="card mb-3">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-0">{{ meeting.title }}</h5>
+                        <small class="d-block">Participants: <span id="participant-count">1</span></small>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button id="toggleVideo" class="btn btn-light btn-sm">
+                            <i class="bi bi-camera-video"></i>
+                        </button>
+                        <button id="toggleAudio" class="btn btn-light btn-sm">
+                            <i class="bi bi-mic"></i>
+                        </button>
+                        <button id="switchCamera" class="btn btn-light btn-sm d-none">
+                            <i class="bi bi-camera"></i>
+                        </button>
+                        <button id="toggleSize" class="btn btn-light btn-sm">
+                            <i class="bi bi-arrows-angle-expand"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info mb-3">
+                        <strong>Meeting ID:</strong> 
+                        <span id="meeting-id">{{ meeting.meeting_id }}</span>
+                        <button class="btn btn-sm btn-outline-primary float-end" onclick="copyMeetingId()">
+                            <i class="bi bi-clipboard"></i> Copy
+                        </button>
+                    </div>
+                    <div id="video-grid" class="video-grid">
+                        <div class="video-container" id="local-video-container">
+                            <video id="localVideo" autoplay muted playsinline class="video-element"></video>
+                            <div class="video-label">You</div>
+                        </div>
+                    </div>
+                    <div class="text-center mt-2">
+                        <button id="startCall" class="btn btn-success btn-sm">Join Call</button>
+                        <button id="endCall" class="btn btn-danger btn-sm" style="display: none;">Leave Call</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Text Chat Section -->
+        <div class="col-md-8" id="text-section">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h3 class="mb-0">Chat Room</h3>
+                </div>
+                <div class="card-body">
+                    <div id="chat-messages" class="mb-3" style="height: 400px; overflow-y: auto;">
+                        {% for message in messages|reverse %}
+                        <div class="message mb-2">
+                            <strong>{{ message.author.username }}</strong>
+                            <small class="text-muted">{{ message.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</small>
+                            <div>{{ message.content }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <form id="message-form" class="d-flex gap-2">
+                        <input type="text" id="message-input" class="form-control" placeholder="Type your message..." required>
+                        <button type="submit" class="btn btn-primary">Send</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="control-panel" id="controlPanel" style="display: none;">
+    <button class="btn btn-light rounded-circle" id="toggleVideoBtn">
+        <i class="bi bi-camera-video"></i>
+    </button>
+    <button class="btn btn-light rounded-circle" id="toggleAudioBtn">
+        <i class="bi bi-mic"></i>
+    </button>
+    <button class="btn btn-light rounded-circle" id="toggleChatBtn">
+        <i class="bi bi-chat-dots"></i>
+    </button>
+    <button class="btn btn-danger rounded-circle" id="leaveCallBtn">
+        <i class="bi bi-telephone-x"></i>
+    </button>
+    <button class="btn btn-light rounded-circle" id="toggleExpandBtn">
+        <i class="bi bi-arrows-angle-contract"></i>
+    </button>
+</div>
+
+<div class="chat-overlay" id="chatOverlay">
+    <div class="chat-header">
+        <h6 class="mb-0">Chat Messages</h6>
+    </div>
+    <div class="chat-messages" id="overlayMessages"></div>
+    <div class="chat-input">
+        <form id="overlayChatForm" class="d-flex gap-2">
+            <input type="text" class="form-control" placeholder="Type message..." required>
+            <button type="submit" class="btn btn-primary">Send</button>
+        </form>
+    </div>
+</div>
+
+<style>
+.video-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+    grid-auto-rows: 1fr;
+    margin-bottom: 1rem;
+    width: 100%;
+    height: 100%;
+}
+
+.video-container {
+    position: relative;
+    padding-top: 56.25%; /* 16:9 aspect ratio */
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.video-element {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.video-label {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+
+.participant-disconnected {
+    opacity: 0.5;
+}
+
+.expanded-video {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 1000;
+    background: #000;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.expanded-video .card {
+    height: 100vh;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    display: flex;
+    flex-direction: column;
+}
+
+.expanded-video .card-header {
+    background: rgba(0, 0, 0, 0.5);
+    border: none;
+    padding: 0.5rem 1rem;
+    flex-shrink: 0;
+}
+
+.expanded-video .card-body {
+    flex: 1;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.expanded-video .video-grid {
+    flex: 1;
+    display: grid;
+    gap: 0.5rem;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-items: center;
+    overflow: hidden;
+    padding: 0;
+}
+
+.expanded-video .video-container {
+    width: 100%;
+    height: 100%;
+    padding-top: 0;
+    position: relative;
+    aspect-ratio: 16/9;
+    max-height: calc((100vh - 160px) / var(--rows, 1));
+}
+
+/* Control Panel */
+.control-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    padding: 1rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    z-index: 1003;
+}
+
+.control-panel button {
+    min-width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.chat-overlay {
+    position: fixed;
+    right: 0;
+    top: 0;
+    width: 300px;
+    height: 100vh;
+    background: rgba(255, 255, 255, 0.95);
+    z-index: 1002;
+    display: none;
+    flex-direction: column;
+    border-left: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.expanded-video .chat-overlay.show {
+    display: flex;
+}
+
+.chat-overlay .chat-header {
+    padding: 1rem;
+    background: #f8f9fa;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.chat-overlay .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.chat-overlay .chat-input {
+    padding: 1rem;
+    background: #f8f9fa;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Dynamic grid columns based on participant count */
+.video-grid[data-participants="1"] {
+    --rows: 1;
+    grid-template: 1fr / 1fr;
+}
+
+.video-grid[data-participants="2"] {
+    --rows: 1;
+    grid-template: 1fr / repeat(2, 1fr);
+}
+
+.video-grid[data-participants="3"],
+.video-grid[data-participants="4"] {
+    --rows: 2;
+    grid-template: repeat(2, 1fr) / repeat(2, 1fr);
+}
+
+.video-grid[data-participants="5"],
+.video-grid[data-participants="6"] {
+    --rows: 2;
+    grid-template: repeat(2, 1fr) / repeat(3, 1fr);
+}
+
+.video-grid[data-participants="7"],
+.video-grid[data-participants="8"],
+.video-grid[data-participants="9"] {
+    --rows: 3;
+    grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+}
+
+@media (max-width: 1200px) {
+    .video-grid[data-participants="5"],
+    .video-grid[data-participants="6"] {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .video-grid[data-participants] {
+        grid-template-columns: 1fr;
+    }
+    
+    .expanded-video .video-grid[data-participants="2"],
+    .expanded-video .video-grid[data-participants="3"],
+    .expanded-video .video-grid[data-participants="4"] {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* Responsive grid adjustments */
+@media (max-width: 768px) {
+    .video-grid {
+        grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+    }
+    
+    #video-section {
+        width: 100%;
+    }
+    
+    #text-section {
+        width: 100%;
+    }
+    
+    .row {
+        flex-direction: column;
+    }
+}
+
+/* Adjust the header in expanded mode */
+.expanded-video .card-header {
+    position: sticky;
+    top: 0;
+    z-index: 1002;
+    padding: 1rem;
+}
+
+.transition-smooth {
+    transition: all 0.3s ease-in-out;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+<script>
+    const socket = io();
+    const messageForm = document.getElementById('message-form');
+    const messageInput = document.getElementById('message-input');
+    const chatMessages = document.getElementById('chat-messages');
+    const localVideo = document.getElementById('localVideo');
+    const videoGrid = document.getElementById('video-grid');
+    const startCallButton = document.getElementById('startCall');
+    const endCallButton = document.getElementById('endCall');
+    const toggleVideoButton = document.getElementById('toggleVideo');
+    const toggleAudioButton = document.getElementById('toggleAudio');
+    const participantCount = document.getElementById('participant-count');
+    const toggleSizeButton = document.getElementById('toggleSize');
+    const videoSection = document.getElementById('video-section');
+    const textSection = document.getElementById('text-section');
+    const chatContainer = document.getElementById('chat-container');
+    const meetingId = '{{ meeting.meeting_id }}';
+    let isExpanded = false;
+    const switchCameraButton = document.getElementById('switchCamera');
+    let currentFacingMode = 'user';
+
+    function copyMeetingId() {
+        navigator.clipboard.writeText(meetingId).then(() => {
+            alert('Meeting ID copied to clipboard!');
+        });
+    }
+
+    let localStream;
+    let peerConnections = {};
+    let isInCall = false;
+
+    // Show camera switch button only on mobile devices
+    if ('mediaDevices' in navigator && 'enumerateDevices' in navigator.mediaDevices) {
+        navigator.mediaDevices.enumerateDevices()
+            .then(devices => {
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                if (videoDevices.length > 1) {
+                    switchCameraButton.classList.remove('d-none');
+                }
+            })
+            .catch(err => console.error('Error enumerating devices:', err));
+    }
+
+    // Text chat functionality
+    messageForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const message = messageInput.value.trim();
+        if (message) {
+            socket.emit('send_message', { 
+                message,
+                meeting_id: meetingId
+            });
+            messageInput.value = '';
+        }
+    });
+
+    socket.on('receive_message', (data) => {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message mb-2';
+        messageDiv.innerHTML = `
+            <strong>${data.username}</strong>
+            <small class="text-muted">${data.timestamp}</small>
+            <div>${data.message}</div>
+        `;
+        chatMessages.insertBefore(messageDiv, chatMessages.firstChild);
+    });
+
+    // WebRTC configuration
+    const configuration = {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun.stunprotocol.org:3478' },
+            { 
+                urls: 'turn:numb.viagenie.ca',
+                username: 'webrtc@live.com',
+                credential: 'muazkh'
+            }
+        ]
+    };
+
+    // Detect mobile browser
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+    // Check if browser supports getUserMedia
+    function hasGetUserMedia() {
+        return !!(navigator.mediaDevices &&
+            navigator.mediaDevices.getUserMedia);
+    }
+
+    // Check and request permissions explicitly
+    async function checkAndRequestPermissions() {
+        try {
+            if (!hasGetUserMedia()) {
+                throw new Error('Your browser does not support camera/microphone access');
+            }
+
+            // For iOS Safari, we need to check if the user has granted permissions
+            if (isIOS) {
+                if (typeof DeviceOrientationEvent !== 'undefined' && 
+                    typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    const permissionState = await DeviceOrientationEvent.requestPermission();
+                    if (permissionState !== 'granted') {
+                        throw new Error('Please enable camera access in your device settings');
+                    }
+                }
+            }
+
+            // Request both audio and video separately for better error handling
+            const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            audioStream.getTracks().forEach(track => track.stop());
+
+            const videoStream = await navigator.mediaDevices.getUserMedia({ 
+                audio: false,
+                video: {
+                    facingMode: 'user',
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                }
+            });
+            videoStream.getTracks().forEach(track => track.stop());
+
+            return true;
+        } catch (error) {
+            console.error('Permission check failed:', error);
+            let errorMessage = '';
+
+            if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                if (isIOS) {
+                    errorMessage = 'Please enable camera access in iOS Settings:\n' +
+                        '1. Open Settings\n' +
+                        '2. Scroll down to Safari\n' +
+                        '3. Toggle ON Camera & Microphone Access\n' +
+                        '4. Reload this page';
+                } else {
+                    errorMessage = 'Please grant camera and microphone permissions and reload the page.';
+                }
+            } else if (error.name === 'NotFoundError') {
+                errorMessage = 'No camera or microphone found on your device.';
+            } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+                errorMessage = 'Your camera or microphone may be in use by another application.';
+            } else {
+                errorMessage = 'Error: ' + error.message;
+            }
+
+            alert(errorMessage);
+            return false;
+        }
+    }
+
+    async function setupMediaStream(facingMode = 'user') {
+        try {
+            // First check permissions
+            const permissionsGranted = await checkAndRequestPermissions();
+            if (!permissionsGranted) {
+                throw new Error('Permission not granted');
+            }
+
+            // Stop any existing streams
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+
+            // Set up constraints based on device
+            const constraints = {
+                audio: true,
+                video: {
+                    facingMode: facingMode,
+                    width: isMobile ? { ideal: 640 } : { ideal: 1280 },
+                    height: isMobile ? { ideal: 480 } : { ideal: 720 }
+                }
+            };
+
+            // Request the stream with specific constraints
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            
+            // If we got here, we have the stream
+            localStream = stream;
+            localVideo.srcObject = stream;
+            currentFacingMode = facingMode;
+
+            // Enable control buttons
+            toggleVideoButton.disabled = false;
+            toggleAudioButton.disabled = false;
+            if (isMobile) {
+                switchCameraButton.classList.remove('d-none');
+            }
+
+            return true;
+        } catch (error) {
+            console.error('Error in setupMediaStream:', error);
+            handleMediaError(error);
+            return false;
+        }
+    }
+
+    function handleMediaError(error) {
+        let errorMessage = 'Unable to access camera/microphone. ';
+        
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+            if (isIOS) {
+                errorMessage = 'Please enable camera access in iOS Settings:\n' +
+                    '1. Open Settings\n' +
+                    '2. Scroll down to Safari\n' +
+                    '3. Toggle ON Camera & Microphone Access\n' +
+                    '4. Reload this page';
+            } else {
+                errorMessage = 'Please grant camera and microphone permissions and reload the page.';
+            }
+        } else if (error.name === 'NotFoundError') {
+            errorMessage = 'No camera or microphone found on your device.';
+        } else if (error.name === 'NotReadableError') {
+            errorMessage = 'Your camera or microphone is already in use by another application.';
+        } else {
+            errorMessage = 'Error: ' + error.message;
+        }
+        
+        alert(errorMessage);
+        
+        // Disable media control buttons
+        toggleVideoButton.disabled = true;
+        toggleAudioButton.disabled = true;
+    }
+
+    // Add camera switch functionality
+    switchCameraButton.addEventListener('click', async () => {
+        const newFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+        await setupMediaStream(newFacingMode);
+    });
+
+    // Add this new function to handle device changes
+    navigator.mediaDevices.ondevicechange = async () => {
+        if (isInCall) {
+            try {
+                await setupMediaStream();
+            } catch (error) {
+                console.error('Error handling device change:', error);
+            }
+        }
+    };
+
+    function createPeerConnection(userId, username) {
+        console.log('Creating peer connection for:', username);
+        
+        // Remove any existing connection for this user
+        if (peerConnections[userId]) {
+            console.log('Cleaning up existing connection for:', username);
+            peerConnections[userId].connection.close();
+            peerConnections[userId].videoContainer.remove();
+            delete peerConnections[userId];
+        }
+
+        const peerConnection = new RTCPeerConnection(configuration);
+        
+        // Add local stream tracks to peer connection
+        if (localStream) {
+            console.log('Adding local tracks to peer connection for:', username);
+            localStream.getTracks().forEach(track => {
+                console.log('Adding track:', track.kind);
+                peerConnection.addTrack(track, localStream);
+            });
+        }
+
+        // Create video element for remote peer
+        const videoContainer = document.createElement('div');
+        videoContainer.className = 'video-container';
+        videoContainer.id = `video-container-${userId}`;
+
+        const videoElement = document.createElement('video');
+        videoElement.id = `video-${userId}`;
+        videoElement.autoplay = true;
+        videoElement.playsInline = true;
+        videoElement.className = 'video-element';
+        videoElement.muted = false;  // Important: Don't mute remote videos
+
+        const videoLabel = document.createElement('div');
+        videoLabel.className = 'video-label';
+        videoLabel.textContent = username;
+
+        videoContainer.appendChild(videoElement);
+        videoContainer.appendChild(videoLabel);
+        videoGrid.appendChild(videoContainer);
+
+        // Handle incoming tracks
+        peerConnection.ontrack = (event) => {
+            console.log('Received track from:', username, 'Track kind:', event.track.kind);
+            if (event.streams && event.streams[0]) {
+                console.log('Setting stream for:', username);
+                videoElement.srcObject = event.streams[0];
+                
+                // Ensure video plays
+                const playPromise = videoElement.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        console.log('Error playing video:', error);
+                        // Try playing again
+                        setTimeout(() => videoElement.play(), 1000);
+                    });
+                }
+            }
+        };
+
+        // ICE candidate handling
+        peerConnection.onicecandidate = event => {
+            if (event.candidate) {
+                console.log('Sending ICE candidate to:', username);
+                socket.emit('ice_candidate', {
+                    candidate: event.candidate,
+                    targetUserId: userId,
+                    room: meetingId
+                });
+            }
+        };
+
+        // Connection state monitoring
+        peerConnection.oniceconnectionstatechange = () => {
+            console.log('ICE state change for', username, ':', peerConnection.iceConnectionState);
+            if (peerConnection.iceConnectionState === 'connected') {
+                console.log('Connected to:', username);
+                videoContainer.classList.remove('participant-disconnected');
+            } else if (peerConnection.iceConnectionState === 'disconnected') {
+                console.log('Disconnected from:', username);
+                videoContainer.classList.add('participant-disconnected');
+            } else if (peerConnection.iceConnectionState === 'failed') {
+                console.log('Connection failed with:', username);
+                // Try reconnecting
+                handleConnectionFailure(userId, username);
+            }
+        };
+
+        peerConnection.onconnectionstatechange = () => {
+            console.log('Connection state for', username, ':', peerConnection.connectionState);
+        };
+
+        peerConnection.onnegotiationneeded = async () => {
+            try {
+                console.log('Negotiation needed for:', username);
+                const offer = await peerConnection.createOffer({
+                    offerToReceiveAudio: true,
+                    offerToReceiveVideo: true
+                });
+                await peerConnection.setLocalDescription(offer);
+                
+                socket.emit('offer', {
+                    sdp: offer,
+                    targetUserId: userId,
+                    room: meetingId
+                });
+            } catch (error) {
+                console.error('Error during negotiation:', error);
+            }
+        };
+
+        peerConnections[userId] = {
+            connection: peerConnection,
+            videoElement: videoElement,
+            videoContainer: videoContainer,
+            username: username
+        };
+
+        updateParticipantCount();
+        return peerConnection;
+    }
+
+    function handleConnectionFailure(userId, username) {
+        // Clean up the failed connection
+        if (peerConnections[userId]) {
+            peerConnections[userId].connection.close();
+            peerConnections[userId].videoContainer.remove();
+            delete peerConnections[userId];
+        }
+
+        // Attempt to establish a new connection
+        if (isInCall) {
+            setTimeout(async () => {
+                try {
+                    const newPeerConnection = createPeerConnection(userId, username);
+                    const offer = await newPeerConnection.createOffer({
+                        offerToReceiveAudio: true,
+                        offerToReceiveVideo: true
+                    });
+                    await newPeerConnection.setLocalDescription(offer);
+                    
+                    socket.emit('offer', {
+                        sdp: offer,
+                        targetUserId: userId,
+                        room: meetingId
+                    });
+                } catch (error) {
+                    console.error('Error recreating connection:', error);
+                }
+            }, 2000);
+        }
+    }
+
+    socket.on('user_joined', async data => {
+        console.log('User joined:', data.username);
+        if (!isInCall) return;
+        
+        try {
+            const peerConnection = createPeerConnection(data.userId, data.username);
+            
+            // Create and send offer
+            const offer = await peerConnection.createOffer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: true
+            });
+            
+            console.log('Setting local description for:', data.username);
+            await peerConnection.setLocalDescription(offer);
+            
+            console.log('Sending offer to:', data.username);
+            socket.emit('offer', {
+                sdp: offer,
+                targetUserId: data.userId,
+                room: meetingId
+            });
+        } catch (error) {
+            console.error('Error handling user joined:', error);
+        }
+    });
+
+    socket.on('user_left', data => {
+        if (peerConnections[data.userId]) {
+            peerConnections[data.userId].connection.close();
+            peerConnections[data.userId].videoContainer.remove();
+            delete peerConnections[data.userId];
+            updateParticipantCount();
+        }
+    });
+
+    socket.on('offer', async data => {
+        console.log('Received offer from:', data.username);
+        try {
+            if (!isInCall) {
+                await startCall();
+            }
+
+            const peerConnection = createPeerConnection(data.userId, data.username);
+            
+            console.log('Setting remote description from:', data.username);
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+            
+            console.log('Creating answer for:', data.username);
+            const answer = await peerConnection.createAnswer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: true
+            });
+            
+            console.log('Setting local description (answer)');
+            await peerConnection.setLocalDescription(answer);
+            
+            console.log('Sending answer to:', data.username);
+            socket.emit('answer', {
+                sdp: answer,
+                targetUserId: data.userId,
+                room: meetingId
+            });
+        } catch (error) {
+            console.error('Error handling offer:', error);
+        }
+    });
+
+    socket.on('answer', async data => {
+        console.log('Received answer from:', data.username);
+        const peer = peerConnections[data.userId];
+        if (peer) {
+            try {
+                await peer.connection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+            } catch (error) {
+                console.error('Error setting remote description:', error);
+            }
+        }
+    });
+
+    socket.on('ice_candidate', async data => {
+        console.log('Received ICE candidate from:', data.username);
+        const peer = peerConnections[data.userId];
+        if (peer) {
+            try {
+                await peer.connection.addIceCandidate(new RTCIceCandidate(data.candidate));
+            } catch (error) {
+                console.error('Error adding ICE candidate:', error);
+            }
+        }
+    });
+
+    // Media control handlers
+    toggleVideoButton.addEventListener('click', () => {
+        const videoTrack = localStream.getVideoTracks()[0];
+        videoTrack.enabled = !videoTrack.enabled;
+        toggleVideoButton.innerHTML = videoTrack.enabled ? 
+            '<i class="bi bi-camera-video"></i>' : 
+            '<i class="bi bi-camera-video-off"></i>';
+    });
+
+    toggleAudioButton.addEventListener('click', () => {
+        const audioTrack = localStream.getAudioTracks()[0];
+        audioTrack.enabled = !audioTrack.enabled;
+        toggleAudioButton.innerHTML = audioTrack.enabled ? 
+            '<i class="bi bi-mic"></i>' : 
+            '<i class="bi bi-mic-mute"></i>';
+    });
+
+    startCallButton.addEventListener('click', startCall);
+    endCallButton.addEventListener('click', endCall);
+
+    // Scroll to bottom on load
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    toggleSizeButton.addEventListener('click', () => {
+        isExpanded = !isExpanded;
+        videoSection.classList.toggle('expanded-video');
+        textSection.style.display = isExpanded ? 'none' : 'block';
+        controlPanel.style.display = isExpanded ? 'flex' : 'none';
+        
+        // Update button icon
+        toggleSizeButton.innerHTML = isExpanded ? 
+            '<i class="bi bi-arrows-angle-contract"></i>' : 
+            '<i class="bi bi-arrows-angle-expand"></i>';
+        
+        // Adjust video grid layout
+        updateParticipantCount();
+        
+        // Trigger a resize event to adjust video layouts
+        window.dispatchEvent(new Event('resize'));
+    });
+
+    // Toggle chat overlay
+    toggleChatBtn.addEventListener('click', () => {
+        chatOverlay.classList.toggle('show');
+    });
+
+    // Sync messages between main chat and overlay
+    socket.on('receive_message', (data) => {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message mb-2';
+        messageDiv.innerHTML = `
+            <strong>${data.username}</strong>
+            <small class="text-muted">${data.timestamp}</small>
+            <div>${data.message}</div>
+        `;
+        
+        // Add to main chat
+        chatMessages.insertBefore(messageDiv.cloneNode(true), chatMessages.firstChild);
+        
+        // Add to overlay chat
+        overlayMessages.appendChild(messageDiv);
+        overlayMessages.scrollTop = overlayMessages.scrollHeight;
+    });
+
+    // Handle overlay chat form
+    overlayChatForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const input = overlayChatForm.querySelector('input');
+        const message = input.value.trim();
+        if (message) {
+            socket.emit('send_message', { 
+                message,
+                meeting_id: meetingId
+            });
+            input.value = '';
+        }
+    });
+
+    // Update control panel buttons
+    document.getElementById('toggleVideoBtn').addEventListener('click', () => {
+        const videoTrack = localStream.getVideoTracks()[0];
+        videoTrack.enabled = !videoTrack.enabled;
+        document.getElementById('toggleVideoBtn').innerHTML = videoTrack.enabled ? 
+            '<i class="bi bi-camera-video"></i>' : 
+            '<i class="bi bi-camera-video-off"></i>';
+    });
+
+    document.getElementById('toggleAudioBtn').addEventListener('click', () => {
+        const audioTrack = localStream.getAudioTracks()[0];
+        audioTrack.enabled = !audioTrack.enabled;
+        document.getElementById('toggleAudioBtn').innerHTML = audioTrack.enabled ? 
+            '<i class="bi bi-mic"></i>' : 
+            '<i class="bi bi-mic-mute"></i>';
+    });
+
+    document.getElementById('leaveCallBtn').addEventListener('click', endCall);
+
+    // Add resize event listener
+    window.addEventListener('resize', () => {
+        if (isExpanded) {
+            updateParticipantCount();
+        }
+    });
+
+    function updateParticipantCount() {
+        const count = Object.keys(peerConnections).length + 1;
+        participantCount.textContent = count;
+        videoGrid.setAttribute('data-participants', count);
+        
+        // Calculate rows and columns based on participant count
+        let rows, cols;
+        if (count <= 1) {
+            rows = 1; cols = 1;
+        } else if (count <= 2) {
+            rows = 1; cols = 2;
+        } else if (count <= 4) {
+            rows = 2; cols = 2;
+        } else if (count <= 6) {
+            rows = 2; cols = 3;
+        } else if (count <= 9) {
+            rows = 3; cols = 3;
+        } else {
+            rows = Math.ceil(Math.sqrt(count));
+            cols = Math.ceil(count / rows);
+        }
+        
+        // Set CSS custom property for rows
+        videoGrid.style.setProperty('--rows', rows);
+        
+        // Apply grid template
+        if (isExpanded) {
+            const height = window.innerHeight - 160; // Account for header and control panel
+            const maxHeight = Math.floor(height / rows);
+            document.documentElement.style.setProperty('--video-max-height', `${maxHeight}px`);
+            videoGrid.style.gridTemplate = `repeat(${rows}, 1fr) / repeat(${cols}, 1fr)`;
+        }
+    }
+
+    async function startCall() {
+        try {
+            startCallButton.disabled = true;
+            const spinner = startCallButton.querySelector('.spinner-border');
+            spinner.classList.remove('d-none');
+
+            // Check permissions first
+            const permissionsGranted = await checkAndRequestPermissions();
+            if (!permissionsGranted) {
+                throw new Error('Please grant camera and microphone permissions to join the call');
+            }
+
+            // Setup media stream
+            const success = await setupMediaStream();
+            if (!success) {
+                throw new Error('Failed to setup media devices');
+            }
+
+            // Join the room
+            socket.emit('join', { room: meetingId });
+            startCallButton.style.display = 'none';
+            endCallButton.style.display = 'inline-block';
+            isInCall = true;
+
+        } catch (error) {
+            console.error('Error starting call:', error);
+            handleMediaError(error);
+        } finally {
+            startCallButton.disabled = false;
+            const spinner = startCallButton.querySelector('.spinner-border');
+            spinner.classList.add('d-none');
+        }
+    }
+
+    // Update the Join Call button to be more visible and add loading state
+    startCallButton.innerHTML = `
+        <span class="d-flex align-items-center">
+            <span class="me-2">Join Call</span>
+            <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+        </span>
+    `;
+
+    startCallButton.addEventListener('click', async () => {
+        const spinner = startCallButton.querySelector('.spinner-border');
+        spinner.classList.remove('d-none');
+        await startCall();
+        spinner.classList.add('d-none');
+    });
+
+    function endCall() {
+        // Close all peer connections and remove video containers
+        Object.values(peerConnections).forEach(peer => {
+            peer.connection.close();
+            peer.videoContainer.remove();
+        });
+        peerConnections = {};
+        
+        // Stop all local tracks
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop());
+            localStream = null;
+            localVideo.srcObject = null;
+        }
+
+        // Collapse expanded view if active
+        if (isExpanded) {
+            isExpanded = false;
+            videoSection.classList.remove('expanded-video');
+            textSection.style.display = 'block';
+            controlPanel.style.display = 'none';
+            toggleSizeButton.innerHTML = '<i class="bi bi-arrows-angle-expand"></i>';
+            chatOverlay.classList.remove('show');
+        }
+
+        socket.emit('leave', { room: meetingId });
+        startCallButton.style.display = 'inline-block';
+        endCallButton.style.display = 'none';
+        isInCall = false;
+        updateParticipantCount();
+
+        // Reset video and audio button states
+        toggleVideoButton.innerHTML = '<i class="bi bi-camera-video"></i>';
+        toggleAudioButton.innerHTML = '<i class="bi bi-mic"></i>';
+    }
+</script>
+{% endblock %} 
